@@ -20,6 +20,8 @@ from photon_analyzer import find_highest_prob_photon, save_all_photons
 from cleandir import clean_results_directory
 
 # 配置参数
+# 注意：修改RESULTS_DIR时，其他模块会自动使用这里定义的路径
+# 无需修改photon_analyzer.py、Generate_gconfig.py、cleandir.py等文件
 BASE_DIR = "/home/mxr/lee/data/fermilat"
 TEMPLATE_CONFIG = "/home/mxr/lee/config.yaml"  # 标准配置文件模板
 GRB_DATA_DIR = os.path.join(BASE_DIR, "grb_data")
@@ -33,6 +35,8 @@ THREAD_TIMEOUT = 3600  # 单个任务超时时间（秒）
 def setup_logging():
     """设置多线程安全的日志系统"""
     log_format = '%(asctime)s - %(threadName)s - %(levelname)s - %(message)s'
+    # 确保日志目录存在
+    os.makedirs(RESULTS_DIR, exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
         format=log_format,
@@ -91,7 +95,8 @@ def analyze_grb_worker(grb_name, result_collector):
             logger.info(f"[{thread_id}] {grb_name} GRB参数解析完成")
             # 生成 config.yaml
             from Generate_gconfig import create_config
-            config_path = create_config(grb_name, grb_params)
+            output_dir = os.path.join(RESULTS_DIR, grb_name)
+            config_path = create_config(grb_name, grb_params, output_dir=output_dir)
             logger.info(f"[{thread_id}] {grb_name} 配置文件生成: {config_path}")
         except Exception as e:
             raise Exception(f"解析GRB信息失败: {str(e)}")
