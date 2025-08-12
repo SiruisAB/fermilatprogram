@@ -265,15 +265,31 @@ def process_excel_and_download(excel_path, base_save_dir="/home/mxr/lee/data/fer
         thread_safe_print(f"处理Excel文件时出错: {str(e)}")
         return False
 
-if __name__ == "__main__":
-    # 指定Excel文件路径
-    excel_file = "/home/mxr/lee/fermilat-grb.xls"  # 替换为Excel文件路径
+def main():
+    """主函数，支持命令行参数"""
+    import argparse
     
-    # 执行批量多线程下载
+    parser = argparse.ArgumentParser(description='Fermi LAT GRB数据下载工具')
+    parser.add_argument('--excel', '-e', 
+                       default='/home/mxr/lee/fermilat-grb.xls',
+                       help='Excel文件路径（默认：/home/mxr/lee/fermilat-grb.xls）')
+    parser.add_argument('--output', '-o',
+                       default='/home/mxr/lee/data/fermilat',
+                       help='输出目录（默认：/home/mxr/lee/data/fermilat）')
+    parser.add_argument('--workers', '-w',
+                       type=int, default=3,
+                       help='并发线程数（默认：3）')
+    
+    args = parser.parse_args()
+    
     thread_safe_print("开始批量多线程下载Fermi LAT数据...")
+    thread_safe_print(f"Excel文件: {args.excel}")
+    thread_safe_print(f"输出目录: {args.output}")
+    thread_safe_print(f"并发线程数: {args.workers}")
+    
     start_time = time.time()
     
-    success = process_excel_and_download(excel_file, max_workers=3)
+    success = process_excel_and_download(args.excel, args.output, args.workers)
     
     end_time = time.time()
     thread_safe_print(f"总耗时: {end_time - start_time:.2f} 秒")
@@ -282,3 +298,6 @@ if __name__ == "__main__":
         thread_safe_print("所有任务执行成功!")
     else:
         thread_safe_print("部分任务执行失败，请检查日志")
+
+if __name__ == "__main__":
+    main()

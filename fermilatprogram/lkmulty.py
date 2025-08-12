@@ -14,10 +14,10 @@ import argparse
 import sys
 from astropy.coordinates import SkyCoord
 import astropy.units as u
-from Generate_gconfig import parse_grb_info as parse_grb_info_from_module
+from .Generate_gconfig import parse_grb_info as parse_grb_info_from_module
 # 导入photon_analyzer模块中的函数
-from photon_analyzer import find_highest_prob_photon, save_all_photons
-from cleandir import clean_results_directory
+from .photon_analyzer import find_highest_prob_photon, save_all_photons
+from .cleandir import clean_results_directory
 
 # 配置参数
 # 注意：修改RESULTS_DIR时，其他模块会自动使用这里定义的路径
