@@ -152,7 +152,7 @@ def analyze_grb_worker(grb_name, result_collector):
 
         # 8. 执行SED分析
         try:
-            from sed_plotter import plot_sed, save_sed_plot
+            from .sed_plotter import plot_sed, save_sed_plot
             # 绘制SED图像
             sed = gta.sed(f'{grb_name}',loge_bins=np.linspace(2, 5, num=6),use_local_index=True)
             plot_sed(c, sed, f'{grb_name}')
