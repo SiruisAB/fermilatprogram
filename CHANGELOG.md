@@ -90,6 +90,6 @@
 
 ## 联系方式
 
-- 项目主页: https://github.com/yourusername/fermilatprogram
-- 问题反馈: https://github.com/yourusername/fermilatprogram/issues
-- 邮箱: grb@example.com
+- 项目主页: https://github.com/SiruisAB/fermilatprogram
+- 问题反馈: https://github.com/SiruisAB/fermilatprogram/issues
+- 邮箱: 1016481197@qq.com

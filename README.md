@@ -124,8 +124,8 @@ fermilatprogram/
 ## 📞 联系方式
 
 如有问题或建议，请联系：
-- Email: grb@example.com
-- GitHub Issues: [项目Issues页面](https://github.com/yourusername/fermilatprogram/issues)
+- Email: 1016481197@qq.com
+- GitHub Issues: [项目Issues页面](https://github.com/SiruisAB/fermilatprogram/issues)
 
 ## 🙏 致谢
 
