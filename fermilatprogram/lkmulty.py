@@ -14,14 +14,12 @@ import argparse
 import sys
 from astropy.coordinates import SkyCoord
 import astropy.units as u
-from .Generate_gconfig import parse_grb_info as parse_grb_info_from_module
+from Generate_gconfig import parse_grb_info as parse_grb_info_from_module
 # 导入photon_analyzer模块中的函数
-from .photon_analyzer import find_highest_prob_photon, save_all_photons
-from .cleandir import clean_results_directory
+from photon_analyzer import find_highest_prob_photon, save_all_photons
+from cleandir import clean_results_directory
 
 # 配置参数
-# 注意：修改RESULTS_DIR时，其他模块会自动使用这里定义的路径
-# 无需修改photon_analyzer.py、Generate_gconfig.py、cleandir.py等文件
 BASE_DIR = "/home/mxr/lee/data/fermilat"
 TEMPLATE_CONFIG = "/home/mxr/lee/config.yaml"  # 标准配置文件模板
 GRB_DATA_DIR = os.path.join(BASE_DIR, "grb_data")
@@ -35,8 +33,6 @@ THREAD_TIMEOUT = 3600  # 单个任务超时时间（秒）
 def setup_logging():
     """设置多线程安全的日志系统"""
     log_format = '%(asctime)s - %(threadName)s - %(levelname)s - %(message)s'
-    # 确保日志目录存在
-    os.makedirs(RESULTS_DIR, exist_ok=True)
     logging.basicConfig(
         level=logging.INFO,
         format=log_format,
@@ -79,6 +75,8 @@ def parse_grb_info(grb_dir):
     grb_name = os.path.basename(grb_dir)
     return parse_grb_info_from_module(grb_name, RESULTS_DIR)
 
+
+
 def analyze_grb_worker(grb_name, result_collector):
     """执行单个GRB的分析流程（线程安全版本）"""
     thread_id = threading.current_thread().name
@@ -88,16 +86,15 @@ def analyze_grb_worker(grb_name, result_collector):
         logger.info(f"[{thread_id}] {'='*40}")
         logger.info(f"[{thread_id}] 开始分析: {grb_name}")
         logger.info(f"[{thread_id}] {'='*40}")
-        
+
         # 2. 获取GRB参数
         try:
             grb_params = parse_grb_info(os.path.join(GRB_DATA_DIR, grb_name))
             logger.info(f"[{thread_id}] {grb_name} GRB参数解析完成")
             # 生成 config.yaml
             from Generate_gconfig import create_config
-            output_dir = os.path.join(RESULTS_DIR, grb_name)
-            config_path = create_config(grb_name, grb_params, output_dir=output_dir)
-            logger.info(f"[{thread_id}] {grb_name} 配置文件生成: {config_path}")
+            config_path = create_config(grb_name, grb_params)
+            # logger.info(f"[{thread_id}] {grb_name} 配置文件生成: {config_path}")
         except Exception as e:
             raise Exception(f"解析GRB信息失败: {str(e)}")
 
@@ -152,7 +149,7 @@ def analyze_grb_worker(grb_name, result_collector):
 
         # 8. 执行SED分析
         try:
-            from .sed_plotter import plot_sed, save_sed_plot
+            from sed_plotter import plot_sed, save_sed_plot
             # 绘制SED图像
             sed = gta.sed(f'{grb_name}',loge_bins=np.linspace(2, 5, num=6),use_local_index=True)
             plot_sed(c, sed, f'{grb_name}')
@@ -165,18 +162,43 @@ def analyze_grb_worker(grb_name, result_collector):
 
         # 9. 获取最高能高概率光子信息（在拟合后进行）
         highest_photon = find_highest_prob_photon(gta, grb_name, grb_params, RESULTS_DIR)
-        # 10. 保存拟合结果（包含最高能光子信息）
+        # 10. 保存拟合结果（包含最高能光子信息和分析摘要）
         if fit_results:
             try:
                 result_path = os.path.join(RESULTS_DIR, grb_name, f"{grb_name}_fit_results.txt")
+                analysis_time = time.time() - start_time
+                
                 with open(result_path, 'w') as f:
                     f.write(f"GRB Analysis Results for {grb_name}\n")
-                    f.write("="*40 + "\n")
+                    f.write("="*50 + "\n")
+                    f.write(f"分析目录: {BASE_DIR}\n")
+                    f.write(f"分析时间: {pd.Timestamp.now()}\n")
+                    f.write(f"分析耗时: {analysis_time:.2f}s\n")
+                    f.write("\n")
+                    
+                    # 添加GRB基本参数信息（包含T0, T1）
+                    f.write("GRB Parameters:\n")
+                    f.write("-"*20 + "\n")
+                    f.write(f"RA: {grb_params['ra']:.4f} deg\n")
+                    f.write(f"Dec: {grb_params['dec']:.4f} deg\n")
+                    f.write(f"Trigger MET: {grb_params['trigger_met']:.2f} s\n")
+                    f.write(f"T0: {grb_params['T0']:.2f} s\n")
+                    f.write(f"T1: {grb_params['T1']:.2f} s\n")
+                    f.write(f"Time Range (tmin-tmax): {grb_params['tmin']:.2f} - {grb_params['tmax']:.2f} s\n")
+                    if 'PIndex' in grb_params:
+                        f.write(f"PIndex: {grb_params['PIndex']}\n")
+                    f.write("\n")
+                    
+                    # 添加拟合结果信息
+                    f.write("Fit Results:\n")
+                    f.write("-"*20 + "\n")
                     f.write(f"Fit Quality: {fit_results['fit_quality']}\n")
                     f.write(f"Log-Likelihood: {fit_results['loglike']:.2f}\n")
                     f.write(f"Target Source: {gta.roi[grb_name]}\n\n")
                                        
                     # 添加最高能高概率光子信息
+                    f.write("Highest Energy Photon Analysis:\n")
+                    f.write("-"*30 + "\n")
                     if highest_photon:
                         f.write("Highest Energy Photon (Probability > 0.9):\n")
                         f.write(f"  Energy: {highest_photon['energy']:.2f} MeV\n")
@@ -191,6 +213,10 @@ def analyze_grb_worker(grb_name, result_collector):
                         f.write(f"  Event Type: {highest_photon['event_type']}\n")
                     else:
                         f.write("Highest Energy Photon: Not found with probability > 0.9\n")
+                    
+                    f.write("\n")
+                    f.write("="*50 + "\n")
+                    f.write(f"Analysis completed at: {pd.Timestamp.now()}\n")
                 
                 logger.info(f"[{thread_id}] {grb_name} 拟合结果已保存: {result_path}")
                 
@@ -370,6 +396,8 @@ def main():
     # 解析命令行参数
     args = parse_arguments()
     
+    clean_results_directory(RESULTS_DIR)
+
     try:
         # 如果请求列出GRB列表
         if args.list:
@@ -415,17 +443,7 @@ def main():
                     f.write(f"  分析时间: {result_data['analysis_time']:.2f}s\n")
                     f.write(f"  Fit Quality: {fit_results.get('fit_quality', 'N/A')}\n")
                     f.write(f"  Log-Likelihood: {fit_results.get('loglike', 'N/A')}\n")
-                    
-                    # 添加SED结果摘要
-                    if 'sed_results' in fit_results:
-                        sed_results = fit_results['sed_results']
-                        if 'ts' in sed_results:
-                            ts_values = sed_results['ts']
-                            sig_bins = np.sum(ts_values >= 4.0)
-                            total_bins = len(ts_values)
-                            max_ts = np.max(ts_values) if len(ts_values) > 0 else 0
-                            f.write(f"  SED 总能段: {total_bins} | 显著能段: {sig_bins} | 最大TS: {max_ts:.2f}\n")
-                    
+                                     
                     if 'highest_photon' in fit_results and fit_results['highest_photon']:
                         hp = fit_results['highest_photon']
                         f.write(f"  最高能光子: {hp['energy']:.2f} MeV\n")
