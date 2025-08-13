@@ -8,6 +8,8 @@
 import os
 import yaml
 import argparse
+import pandas as pd
+import re
 
 # =====================
 # 配置参数
@@ -16,52 +18,124 @@ BASE_DIR = "/home/mxr/lee/data/fermilat"
 TEMPLATE_CONFIG = "/home/mxr/lee/config.yaml"  # 标准配置文件模板
 GRB_DATA_DIR = os.path.join(BASE_DIR, "grb_data")
 RESULTS_DIR = os.path.join(BASE_DIR, "resultsPL2")
+EXCEL_FILE = "/home/mxr/lee/fermilat-grb.xls"  # Excel数据文件
+SHEET_NAME = "GCN"  # Excel工作表名称
 
 
-def parse_grb_info(grb_name, results_dir=None):
-    """解析GRB信息文件
+def format_grb_name(gcn_name):
+    """
+    格式化GRB名称，将检测到的GRB*变成标准的GRB*格式
+    :param gcn_name: 原始GRB名称
+    :return: 格式化后的GRB名称
+    """
+    # 去除前后空格
+    gcn_name = str(gcn_name).strip()
+    
+    # 如果名称中包含特殊字符或格式不规范，进行标准化
+    # 例如：GRB 220617A -> GRB220617A, grb220617a -> GRB220617A
+    
+    # 使用正则表达式提取GRB后面的数字和字母部分
+    match = re.search(r'grb\s*(\d{6}[a-zA-Z])', gcn_name, re.IGNORECASE)
+    if match:
+        # 提取数字和字母部分，转换为标准格式
+        grb_suffix = match.group(1).upper()
+        formatted_name = f"GRB{grb_suffix}"
+        return formatted_name
+    
+    # 如果已经是标准格式，直接返回（去除多余空格）
+    if gcn_name.upper().startswith('GRB'):
+        # 去除GRB和后续内容之间的空格
+        formatted_name = re.sub(r'GRB\s+', 'GRB', gcn_name.upper())
+        return formatted_name
+    
+    # 如果格式无法识别，返回原名称
+    print(f"警告: 无法识别的GRB名称格式: {gcn_name}")
+    return gcn_name
+
+
+def parse_grb_info(grb_name, results_dir=None, excel_file=None, sheet_name=None):
+    """从Excel表格中解析GRB信息
     
     参数:
         grb_name (str): GRB名称
-        results_dir (str, optional): 结果目录路径，默认为全局RESULTS_DIR
+        results_dir (str, optional): 结果目录路径，默认为全局RESULTS_DIR（保留兼容性）
+        excel_file (str, optional): Excel文件路径，默认为全局EXCEL_FILE
+        sheet_name (str, optional): Excel工作表名称，默认为全局SHEET_NAME
         
     返回:
         dict: 包含GRB参数的字典
     """
-    if results_dir is None:
-        results_dir = RESULTS_DIR
+    # 设置默认值
+    if excel_file is None:
+        excel_file = EXCEL_FILE
+    if sheet_name is None:
+        sheet_name = SHEET_NAME
+    
+    # 检查Excel文件是否存在
+    if not os.path.exists(excel_file):
+        raise FileNotFoundError(f"Excel文件不存在: {excel_file}")
+    
+    try:
+        # 读取Excel表格
+        df = pd.read_excel(excel_file, sheet_name=sheet_name)
         
-    info_file = os.path.join(results_dir, grb_name, f"{grb_name}.txt")
+        # 格式化输入的GRB名称
+        formatted_grb_name = format_grb_name(grb_name)
+        
+        # 在表格中查找匹配的GRB
+        grb_row = None
+        for idx, row in df.iterrows():
+            original_gcn_name = str(row['gcn_name']).strip()
+            formatted_gcn_name = format_grb_name(original_gcn_name)
+            
+            if formatted_gcn_name == formatted_grb_name:
+                grb_row = row
+                break
+        
+        if grb_row is None:
+            raise ValueError(f"在Excel表格中未找到GRB: {grb_name} (格式化为: {formatted_grb_name})")
+        
+        # 解析ra,dec字段
+        ra_dec = str(grb_row['ra,dec']).strip()
+        ra_dec_parts = ra_dec.split(',')
+        
+        if len(ra_dec_parts) != 2:
+            raise ValueError(f"GRB {grb_name} 的ra,dec格式不正确: '{ra_dec}'")
+        
+        ra = float(ra_dec_parts[0].strip())
+        dec = float(ra_dec_parts[1].strip())
+        
+        # 构建参数字典
+        params = {
+            'trigger_met': float(grb_row['trigger_met']),
+            'T0': float(grb_row['T0']),
+            'T1': float(grb_row['T1']),
+            'ra': ra,
+            'dec': dec,
+            'PIndex': grb_row.get('PIndex', 'N/A')
+        }
+        
+        # 计算时间范围
+        params['tmin'] = params['trigger_met'] + params['T0'] - 200
+        params['tmax'] = params['trigger_met'] + params['T1'] + 200
+        
+        return params
+        
+    except Exception as e:
+        raise Exception(f"解析GRB信息失败: {str(e)}")
+
+
+def parse_grb_info_from_module(grb_name, results_dir=None):
+    """为了保持与lkmulty.py的兼容性而提供的包装函数
     
-    if not os.path.exists(info_file):
-        raise FileNotFoundError(f"信息文件不存在: {info_file}")
-    
-    params = {}
-    with open(info_file, 'r') as f:
-        for line in f:
-            if ':' in line:
-                key, value = line.split(':', 1)
-                key = key.strip()
-                value = value.strip()
-                
-                # 尝试转换为数字
-                try:
-                    value = float(value) if '.' in value else int(value)
-                except ValueError:
-                    pass
-                
-                params[key] = value
-    
-    required_keys = ['trigger_met', 'T0', 'T1', 'ra', 'dec']
-    missing = [k for k in required_keys if k not in params]
-    if missing:
-        raise ValueError(f"信息文件缺少必要参数: {', '.join(missing)}")
-    
-    # 计算时间范围
-    params['tmin'] = params['trigger_met'] + params['T0'] - 200
-    params['tmax'] = params['trigger_met'] + params['T1'] + 200
-    
-    return params
+    参数:
+        grb_name (str): GRB名称
+        results_dir (str, optional): 结果目录路径（保留兼容性，实际不使用）
+        
+    返回:
+        dict: 包含GRB参数的字典
+    """
+    return parse_grb_info(grb_name)
 
 
 def create_config(grb_name, grb_params, output_dir=None, template_config=None, grb_data_dir=None):
