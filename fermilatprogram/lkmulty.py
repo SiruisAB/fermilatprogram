@@ -18,12 +18,12 @@ from Generate_gconfig import parse_grb_info as parse_grb_info_from_module
 # 导入photon_analyzer模块中的函数
 from photon_analyzer import find_highest_prob_photon, save_all_photons
 from cleandir import clean_results_directory
-
+from Generate_gconfig import create_config
 # 配置参数
 BASE_DIR = "/home/mxr/lee/data/fermilat"
 TEMPLATE_CONFIG = "/home/mxr/lee/config.yaml"  # 标准配置文件模板
 GRB_DATA_DIR = os.path.join(BASE_DIR, "grb_data")
-RESULTS_DIR = os.path.join(BASE_DIR, "resultsPL2")
+RESULTS_DIR = os.path.join(BASE_DIR, "resultsPL")
 
 # 多线程配置
 MAX_WORKERS = 4  # 最大并行线程数
@@ -75,8 +75,6 @@ def parse_grb_info(grb_dir):
     grb_name = os.path.basename(grb_dir)
     return parse_grb_info_from_module(grb_name, RESULTS_DIR)
 
-
-
 def analyze_grb_worker(grb_name, result_collector):
     """执行单个GRB的分析流程（线程安全版本）"""
     thread_id = threading.current_thread().name
@@ -86,18 +84,10 @@ def analyze_grb_worker(grb_name, result_collector):
         logger.info(f"[{thread_id}] {'='*40}")
         logger.info(f"[{thread_id}] 开始分析: {grb_name}")
         logger.info(f"[{thread_id}] {'='*40}")
+        
+        grb_params = parse_grb_info(os.path.join(GRB_DATA_DIR, grb_name))
 
-        # 2. 获取GRB参数
-        try:
-            grb_params = parse_grb_info(os.path.join(GRB_DATA_DIR, grb_name))
-            logger.info(f"[{thread_id}] {grb_name} GRB参数解析完成")
-            # 生成 config.yaml
-            from Generate_gconfig import create_config
-            config_path = create_config(grb_name, grb_params)
-            # logger.info(f"[{thread_id}] {grb_name} 配置文件生成: {config_path}")
-        except Exception as e:
-            raise Exception(f"解析GRB信息失败: {str(e)}")
-
+        config_path = os.path.join(RESULTS_DIR, grb_name, "config.yaml")
         # 3. 设置分析环境
         try:
             gta = GTAnalysis(config_path, logging={'verbosity': 1})  # 降低日志级别避免冲突
@@ -396,7 +386,12 @@ def main():
     # 解析命令行参数
     args = parse_arguments()
     
-    clean_results_directory(RESULTS_DIR)
+    clean_results_directory(target_dir=RESULTS_DIR)
+    grb_name = args.grb
+    if grb_name:
+        grb_params = parse_grb_info_from_module(grb_name)
+        output_dir = os.path.join(RESULTS_DIR, grb_name)
+        create_config(grb_name, grb_params, output_dir=output_dir)
 
     try:
         # 如果请求列出GRB列表
@@ -419,15 +414,15 @@ def main():
             results, errors = analyze_grb_multithread(max_workers=args.workers)
         
         if results:
-            # 生成汇总报告（使用新的结果格式，包含SED分析）
+            # 生成汇总报告（使用新的结果格式）
             if args.grb:
                 # 单个GRB分析报告
                 summary_path = os.path.join(RESULTS_DIR, f"{args.grb}_analysis_summary.txt")
-                report_title = f"GRB单个事件分析报告: {args.grb}（包含SED分析）"
+                report_title = f"GRB单个事件分析报告: {args.grb}"
             else:
                 # 多线程批量分析报告
                 summary_path = os.path.join(RESULTS_DIR, "analysis_summary.txt")
-                report_title = "GRB多线程分析汇总报告（包含SED分析）"
+                report_title = "GRB多线程分析汇总报告"
             
             with open(summary_path, 'w') as f:
                 f.write(f"{report_title}\n")
@@ -439,15 +434,53 @@ def main():
                 
                 for grb, result_data in results.items():
                     fit_results = result_data['fit_results']
+                    grb_params = result_data['grb_params']
                     f.write(f"{grb}:\n")
+                    f.write("="*30 + "\n")
                     f.write(f"  分析时间: {result_data['analysis_time']:.2f}s\n")
                     f.write(f"  Fit Quality: {fit_results.get('fit_quality', 'N/A')}\n")
                     f.write(f"  Log-Likelihood: {fit_results.get('loglike', 'N/A')}\n")
+                    
+                    # 添加GRB基本参数信息
+                    f.write("  GRB参数:\n")
+                    f.write(f"    RA: {grb_params['ra']:.4f} deg\n")
+                    f.write(f"    Dec: {grb_params['dec']:.4f} deg\n")
+                    f.write(f"    Trigger MET: {grb_params['trigger_met']:.2f} s\n")
+                    f.write(f"    T0: {grb_params['T0']:.2f} s\n")
+                    f.write(f"    T1: {grb_params['T1']:.2f} s\n")
+                    f.write(f"    Time Range: {grb_params['tmin']:.2f} - {grb_params['tmax']:.2f} s\n")
+                    if 'PIndex' in grb_params:
+                        f.write(f"    PIndex: {grb_params['PIndex']}\n")
                                      
                     if 'highest_photon' in fit_results and fit_results['highest_photon']:
                         hp = fit_results['highest_photon']
-                        f.write(f"  最高能光子: {hp['energy']:.2f} MeV\n")
-                        f.write(f"  光子概率: {hp['probability']:.4f}\n")
+                        f.write("  最高能光子信息:\n")
+                        f.write(f"    能量: {hp['energy']:.2f} MeV\n")
+                        f.write(f"    概率: {hp['probability']:.4f}\n")
+                        f.write(f"    相对时间: {hp['relative_time']:.2f} s\n")
+                        f.write(f"    RA: {hp['ra']:.4f} deg\n")
+                        f.write(f"    Dec: {hp['dec']:.4f} deg\n")
+                        f.write(f"    角分离: {hp['angular_separation']:.4f} deg\n")
+                        f.write(f"    高概率光子总数: {hp['total_high_prob_photons']}\n")
+                        f.write(f"    事件类型: {hp['event_class']}, {hp['event_type']}\n")
+                    else:
+                        f.write("  最高能光子: 未找到概率>0.9的光子\n")
+                    
+                    # 尝试从详细结果文件中读取更多信息
+                    try:
+                        result_file_path = os.path.join(RESULTS_DIR, grb, f"{grb}_fit_results.txt")
+                        if os.path.exists(result_file_path):
+                            f.write("  详细分析结果:\n")
+                            with open(result_file_path, 'r') as detail_file:
+                                lines = detail_file.readlines()
+                                # 查找目标源信息
+                                for i, line in enumerate(lines):
+                                    if "Target Source:" in line:
+                                        f.write(f"    目标源信息: {line.split('Target Source:')[1].strip()}\n")
+                                        break
+                    except Exception as e:
+                        f.write(f"  详细信息读取失败: {str(e)}\n")
+                    
                     f.write("\n")
                 
                 if errors:

@@ -116,7 +116,8 @@ def main():
     clean_results_directory(
         backup=args.backup,
         target_dir=args.target_dir,
-        keep_patterns=args.keep_patterns
+        keep_patterns=args.keep_patterns,
+        RESULTS_DIR = RESULTS_DIR
     )
 
 if __name__ == "__main__":
