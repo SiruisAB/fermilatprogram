@@ -188,7 +188,7 @@ def create_config(grb_name, grb_params, output_dir=None, template_config=None, g
         'name': grb_name,
         'ra': grb_params['ra'],
         'dec': grb_params['dec'],
-        'SpectrumType': 'PowerLaw2',
+        'SpectrumType': 'PowerLaw',
         'SpatialModel': 'PointSource'
     })
     

@@ -390,8 +390,8 @@ def main():
     grb_name = args.grb
     if grb_name:
         grb_params = parse_grb_info_from_module(grb_name)
-        output_dir = os.path.join(RESULTS_DIR, grb_name)
-        create_config(grb_name, grb_params, output_dir=output_dir)
+        outputdir = os.path.join(RESULTS_DIR, grb_name)
+        create_config(grb_name, grb_params, output_dir=outputdir)
 
     try:
         # 如果请求列出GRB列表
@@ -411,6 +411,21 @@ def main():
         else:
             # 开始多线程分析所有GRB
             logger.info(f"🔧 使用 {args.workers} 个线程进行批量分析")
+            
+            # 为所有GRB生成config文件
+            grb_list = get_grb_list()
+            if grb_list:
+                logger.info(f"📝 为 {len(grb_list)} 个GRB生成配置文件...")
+                for grb_name in grb_list:
+                    try:
+                        grb_params = parse_grb_info_from_module(grb_name)
+                        outputdir = os.path.join(RESULTS_DIR, grb_name)
+                        create_config(grb_name, grb_params, output_dir=outputdir)
+                        logger.info(f"✅ {grb_name} 配置文件生成成功")
+                    except Exception as e:
+                        logger.error(f"❌ {grb_name} 配置文件生成失败: {str(e)}")
+                logger.info("📝 配置文件生成完成")
+            
             results, errors = analyze_grb_multithread(max_workers=args.workers)
         
         if results:
