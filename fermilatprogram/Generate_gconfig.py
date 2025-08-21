@@ -53,7 +53,7 @@ def format_grb_name(gcn_name):
     return gcn_name
 
 
-def parse_grb_info(grb_name, results_dir=None, excel_file=None, sheet_name=None):
+def parse_grb_info(grb_name, results_dir=None, excel_file=None, sheet_name=None, outtime=70):
     """从Excel表格中解析GRB信息
     
     参数:
@@ -116,8 +116,8 @@ def parse_grb_info(grb_name, results_dir=None, excel_file=None, sheet_name=None)
         }
         
         # 计算时间范围
-        params['tmin'] = params['trigger_met'] + params['T0'] - 200
-        params['tmax'] = params['trigger_met'] + params['T1'] + 200
+        params['tmin'] = params['trigger_met'] + params['T0'] - outtime
+        params['tmax'] = params['trigger_met'] + params['T1'] + outtime*10
         
         return params
         
@@ -178,6 +178,12 @@ def create_config(grb_name, grb_params, output_dir=None, template_config=None, g
     config['selection']['tmin'] = grb_params['tmin']
     config['selection']['tmax'] = grb_params['tmax']
     
+    if grb_params['tmax'] - grb_params['tmin'] > 300:
+        config['gtlike']['irfs'] = 'P8R3_SOURCE_V3'
+        config['model']['isodiff'] = '$FERMI_DIR/refdata/fermi/galdiffuse/iso_P8R3_SOURCE_V3_v1.txt'
+    else:
+        config['gtlike']['irfs'] = 'P8R3_TRANSIENT020_V3'
+        config['model']['isodiff'] = '$FERMI_DIR/refdata/fermi/galdiffuse/iso_P8R3_TRANSIENT020_V3_v1.txt'
     # 更新模型参数
     # 确保源模型存在
     if 'sources' not in config['model']:
@@ -189,7 +195,8 @@ def create_config(grb_name, grb_params, output_dir=None, template_config=None, g
         'ra': grb_params['ra'],
         'dec': grb_params['dec'],
         'SpectrumType': 'PowerLaw',
-        'SpatialModel': 'PointSource'
+        'SpatialModel': 'PointSource',
+        'Index': grb_params['PIndex']
     })
     
     # 保存新配置文件

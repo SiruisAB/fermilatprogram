@@ -88,6 +88,13 @@ def analyze_grb_worker(grb_name, result_collector):
         grb_params = parse_grb_info(os.path.join(GRB_DATA_DIR, grb_name))
 
         config_path = os.path.join(RESULTS_DIR, grb_name, "config.yaml")
+        
+        # 1.清理结果目录
+        clean_results_directory(target_dir=os.path.join(RESULTS_DIR, grb_name), keep_patterns=['GRB*.txt'])
+
+        # 2.创建配置文件
+        create_config(grb_name, grb_params, output_dir=os.path.join(RESULTS_DIR, grb_name))
+
         # 3. 设置分析环境
         try:
             gta = GTAnalysis(config_path, logging={'verbosity': 1})  # 降低日志级别避免冲突
@@ -106,7 +113,6 @@ def analyze_grb_worker(grb_name, result_collector):
         # 6. 设置拟合参数
         try:
             # 释放附近源
-            gta.optimize()
             gta.free_sources(distance=2.5, pars='norm')
             
             # 释放弥散背景
@@ -115,6 +121,8 @@ def analyze_grb_worker(grb_name, result_collector):
             
             # 释放目标GRB
             gta.free_source(grb_name)
+
+            gta.optimize()
             logger.info(f"[{thread_id}] {grb_name} 拟合参数设置完成")
         except Exception as e:
             logger.warning(f"[{thread_id}] {grb_name} 设置拟合参数失败: {str(e)}")
@@ -218,12 +226,12 @@ def analyze_grb_worker(grb_name, result_collector):
                 logger.warning(f"[{thread_id}] {grb_name} 保存拟合结果失败: {str(e)}")
         
         # 11. 保存最终模型和图表
-        try:
-            output_base = os.path.join(RESULTS_DIR, grb_name, "final_model")
-            gta.write_roi(output_base, make_plots=True)
-            logger.info(f"[{thread_id}] {grb_name} 最终模型和图表已保存: {output_base}.*")
-        except Exception as e:
-            logger.warning(f"[{thread_id}] {grb_name} 保存最终模型失败: {str(e)}")
+        # try:
+        #     output_base = os.path.join(RESULTS_DIR, grb_name, "final_model")
+        #     gta.write_roi(output_base, make_plots=True)
+        #     logger.info(f"[{thread_id}] {grb_name} 最终模型和图表已保存: {output_base}.*")
+        # except Exception as e:
+        #     logger.warning(f"[{thread_id}] {grb_name} 保存最终模型失败: {str(e)}")
         
         # 收集结果
         if fit_results:
@@ -386,12 +394,12 @@ def main():
     # 解析命令行参数
     args = parse_arguments()
     
-    clean_results_directory(target_dir=RESULTS_DIR)
-    grb_name = args.grb
-    if grb_name:
-        grb_params = parse_grb_info_from_module(grb_name)
-        outputdir = os.path.join(RESULTS_DIR, grb_name)
-        create_config(grb_name, grb_params, output_dir=outputdir)
+    # clean_results_directory(target_dir=RESULTS_DIR)
+    # grb_name = args.grb
+    # if grb_name:
+    #     grb_params = parse_grb_info_from_module(grb_name)
+    #     outputdir = os.path.join(RESULTS_DIR, grb_name)
+    #     create_config(grb_name, grb_params, output_dir=outputdir)
 
     try:
         # 如果请求列出GRB列表
